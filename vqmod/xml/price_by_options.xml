@@ -1,0 +1,137 @@
+<modification>
+	<id>Starting At Option Price</id>
+	<version>1.5.x</version>
+	<vqmver>2.1.5</vqmver>
+	<author>Bogdan-Ioan BRUDIU</author>
+	<file name="catalog/model/catalog/product.php">
+		<operation>
+			<search position="before"><![CDATA[return array(]]></search>
+			<add><![CDATA[
+$query->row['price'] = ($query->row['discount'] ? $query->row['discount'] : $query->row['price']);			
+
+			// Show first (lowest) option price as "Starting at" price
+			// But for product page, to avoid issues with option price update, use a different method
+			if ($query->row['price'] == 0) {
+				$options = $this->getProductOptions($product_id);
+				
+				$option_prices = array();
+				if ($options) {
+					foreach ($options as $option) {
+						if (!$option['option_value']) { continue; }
+						foreach ($option['option_value'] as $option_value) {
+							if (!(float)$option_value['price']) { continue; }
+							if ($option_value['price_prefix'] == '-') {
+								$option_prices[] = -$option_value['price'];
+							} else {
+								$option_prices[] = $option_value['price'];
+							}
+						}
+					}
+				}
+				if ($option_prices) {
+					sort($option_prices);
+					//if (!isset($this->request->get['product_id']) && !isset($this->request->post['product_id'])) {
+					//if (!isset($_SERVER['HTTP_X_REQUESTED_WITH']) || $_SERVER['HTTP_X_REQUESTED_WITH']!='XMLHttpRequest' && !isset($this->request->get['product_id']) && !isset($this->request->post['product_id'])) {
+					//if (isset($this->request->get['route']) && $this->request->get['route'] != 'product/product') {
+					if ((!isset($_SERVER['HTTP_X_REQUESTED_WITH']) || $_SERVER['HTTP_X_REQUESTED_WITH']!='XMLHttpRequest') && isset($this->request->get['route']) && $this->request->get['route'] != 'product/product') {
+						$query->row['price'] = reset($option_prices);
+					} else {
+						$this->session->data['start_at_price'] = $this->tax->calculate($option_prices[0], $query->row['tax_class_id']);
+						$this->session->data['start_at_price_ex_tax'] = $option_prices[0];
+					}
+				}				
+			}
+			]]></add>
+		</operation>
+<operation>
+			<search position="replace"><![CDATA['price'            => ($query->row['discount'] ? $query->row['discount'] : $query->row['price']),]]></search>
+			<add><![CDATA['price'            => $query->row['price'],]]></add>
+		</operation>
+	</file>
+	
+	<file name="system/library/currency.php">
+		<operation>
+			<search position="after"><![CDATA[
+			public function format($number,
+			]]></search>
+			<add><![CDATA[
+			$trace = debug_backtrace();
+			if (isset($trace[1]['class']) && $trace[1]['class'] == 'ControllerProductProduct') {
+				if ($number == 0 && !empty($this->session->data['start_at_price'])) {
+					$number = $this->session->data['start_at_price'];
+					$starting = true;
+					unset($this->session->data['start_at_price']);
+				}
+				if ($number == 0 && !empty($this->session->data['start_at_price_ex_tax'])) {
+					$number = $this->session->data['start_at_price_ex_tax'];
+					$starting = true;
+					unset($this->session->data['start_at_price_ex_tax']);
+				}
+			}
+			]]></add>
+		</operation>
+		<operation>
+			<search position="before"><![CDATA[
+			return $string;
+			]]></search>
+			<add><![CDATA[
+
+			$this->language->load('common/header');
+
+
+
+			if (isset($starting) && $starting) {
+				$starting = false;
+				$string = $this->language->get('starting_at')." ".$string;
+			}
+			]]></add>
+		</operation>
+		
+	</file>
+<file name="catalog/view/theme/*/template/product/product.tpl">
+		<operation>
+			<search position="replace"><![CDATA[<?php echo $option_value['price_prefix']; ?>]]></search>
+			<add><![CDATA[]]></add>
+		</operation>
+		
+	</file>
+
+<file name="catalog/language/english/common/header.php">
+		<operation>
+			<search position="before"><![CDATA[$_['text_home']]]></search>
+			<add><![CDATA[$_['starting_at']       = 'Starting at';
+]]></add>
+		</operation>
+		
+	</file>
+<file name="catalog/language/romana/common/header.php">
+		<operation>
+			<search position="before"><![CDATA[$_['text_home']]]></search>
+			<add><![CDATA[$_['starting_at']       = 'Incepand de la';
+]]></add>
+		</operation>
+		
+	</file>
+
+
+
+
+<file name="admin/language/english/common/header.php">
+		<operation>
+			<search position="before"><![CDATA[$_['heading_title']]]></search>
+			<add><![CDATA[$_['starting_at']       = 'Starting at';
+]]></add>
+		</operation>
+		
+	</file>
+<file name="admin/language/romana/common/header.php">
+		<operation>
+			<search position="before"><![CDATA[$_['heading_title']]]></search>
+			<add><![CDATA[$_['starting_at']       = 'Incepand de la';
+]]></add>
+		</operation>
+		
+	</file>
+
+
+</modification>
